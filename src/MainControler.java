@@ -10,30 +10,24 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.image.WritableImage;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.Dragboard;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TransferMode;
-import javafx.scene.layout.Background;
-import javafx.scene.layout.BackgroundFill;
-import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
-import javafx.stage.FileChooser;
 import javafx.stage.Window;
 
 import javax.imageio.ImageIO;
-import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
-import java.nio.file.Files;
 import java.text.DecimalFormat;
 import java.text.ParsePosition;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.ResourceBundle;
@@ -45,24 +39,28 @@ public class MainControler implements Initializable {
     public ListView listView;
     public ScrollPane scrollPane;
     public Label lblFolder;
-    public TableView tableView;
+    public TableView<Value> tableView;
     public TextField txtHeight;
     public TextField txtWidth;
-    DecimalFormat format = new DecimalFormat( "#.0" );
+    public StackPane stacPaneDropHere;
+    public AnchorPane contentAnchorPane;
+    DecimalFormat format = new DecimalFormat("#.0");
 
 
     private File folder;
     ObservableList<String> fileNameList = FXCollections.observableArrayList();
-    private Map<String, File> images = new HashMap<>();
-    private TableView upTableView;
+    ObservableList<Value> imageList = FXCollections.observableArrayList();
+    private Map<String, File> fileHashMap = new HashMap<>();
+    private Map<String, Image> imageHashMap = new HashMap<>();
+
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
-        System.out.println("inited");
         setupPane(scrollPane);
         setupListView(listView);
         setupTableView(tableView);
         setUpTextField();
+
     }
 
     private void setUpTextField() {
@@ -71,29 +69,26 @@ public class MainControler implements Initializable {
     }
 
 
-    private void setNumericTextFormatter(TextField textField){
-        textField.setTextFormatter( new TextFormatter<>(c ->
+    private void setNumericTextFormatter(TextField textField) {
+        textField.setTextFormatter(new TextFormatter<>(c ->
         {
-            if ( c.getControlNewText().isEmpty() )
-            {
+            if (c.getControlNewText().isEmpty()) {
                 return c;
             }
 
-            ParsePosition parsePosition = new ParsePosition( 0 );
-            Object object = format.parse( c.getControlNewText(), parsePosition );
+            ParsePosition parsePosition = new ParsePosition(0);
+            Object object = format.parse(c.getControlNewText(), parsePosition);
 
-            if ( object == null || parsePosition.getIndex() < c.getControlNewText().length() )
-            {
+            if (object == null || parsePosition.getIndex() < c.getControlNewText().length()) {
                 return null;
-            }
-            else
-            {
+            } else {
                 return c;
             }
         }));
     }
 
     private void setupPane(ScrollPane pane) {
+        contentAnchorPane.prefWidthProperty().bind(scrollPane.widthProperty());
         pane.setOnDragOver(this::onDragOver);
         pane.setOnDragDropped(this::onDragDropped);
         pane.setOnDragEntered(this::onDragEntered);
@@ -101,15 +96,15 @@ public class MainControler implements Initializable {
     }
 
     private void onDragExited(DragEvent dragEvent) {
-        scrollPane.setBackground(getBackground(Color.BLUE));
+        stacPaneDropHere.setVisible(false);
     }
 
     private void onDragEntered(DragEvent dragEvent) {
-        scrollPane.setBackground(getBackground(Color.RED));
+        stacPaneDropHere.setVisible(true);
+
     }
 
     private void onDragDropped(DragEvent dragEvent) {
-        System.out.println("done");
 
         Dragboard dragboard = dragEvent.getDragboard();
 
@@ -119,11 +114,12 @@ public class MainControler implements Initializable {
 
                     fileNameList.add(f.getName());
                     Image image = new Image(new FileInputStream(f));
-                    images.put(f.getName(), f);
-
+                    fileHashMap.put(f.getName(), f);
+                    imageHashMap.put(f.getName(), image);
                     ImageView imageView = new ImageView(image);
-                    imageView.setFitWidth(100);
                     imageView.setPreserveRatio(true);
+                    imageView.setFitWidth(150);
+                    imageView.setFitHeight(150);
                     flowPane.getChildren().add(imageView);
                 } catch (FileNotFoundException e) {
                     e.printStackTrace();
@@ -135,12 +131,13 @@ public class MainControler implements Initializable {
 
     }
 
+
     private void onDragOver(DragEvent dragEvent) {
         dragEvent.acceptTransferModes(TransferMode.COPY_OR_MOVE);
 
         Dragboard dragboard = dragEvent.getDragboard();
         dragEvent.consume();
-        dragboard.getFiles().forEach(f->{
+        dragboard.getFiles().forEach(f -> {
             FileTypeHelper.ImageType imageType = FileTypeHelper.detectFileType(f);
         });
 
@@ -162,8 +159,23 @@ public class MainControler implements Initializable {
     }
 
     public void setupListView(ListView<String> upListView) {
+        upListView.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 
+        upListView.setOnMouseClicked(this::onItemListClicked);
         upListView.setItems(fileNameList);
+    }
+
+    private void onItemListClicked(MouseEvent mouseEvent) {
+        String selectedItem = (String)listView.getSelectionModel().getSelectedItem();
+
+        if(selectedItem != null){
+            imageList.clear();
+            Image image = imageHashMap.get(selectedItem);
+            imageList.add(new Value("Name", selectedItem));
+            imageList.add(new Value("Width", String.valueOf(image.getWidth())));
+            imageList.add(new Value("Height", String.valueOf(image.getHeight())));
+        }
+
     }
 
     public void writeImageToFile(Image image, File file, FileTypeHelper.ImageType imageType) {
@@ -183,19 +195,18 @@ public class MainControler implements Initializable {
         }
 
 
-        images.forEach((k,v)->{
-            File file = new File (folder,k);
+        fileHashMap.forEach((k, v) -> {
+            File file = new File(folder, k);
             try {
 
 
-                int height = txtHeight.getText().isEmpty() ? 100: Integer.parseInt( txtHeight.getText());
-                int width = txtHeight.getText().isEmpty() ? 100: Integer.parseInt( txtWidth.getText());
+                int height = txtHeight.getText().isEmpty() ? 100 : Integer.parseInt(txtHeight.getText());
+                int width = txtHeight.getText().isEmpty() ? 100 : Integer.parseInt(txtWidth.getText());
 
 
-
-                Image image = new Image(new FileInputStream(v),width,height,true,true);
+                Image image = new Image(new FileInputStream(v), width, height, true, true);
                 FileTypeHelper.ImageType imageType = FileTypeHelper.detectFileType(file);
-                writeImageToFile(image,file,imageType);
+                writeImageToFile(image, file, imageType);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
@@ -204,27 +215,36 @@ public class MainControler implements Initializable {
     }
 
 
-
     public void onFolderChoosePressed(ActionEvent actionEvent) {
 
-       chooseFolder(actionEvent);
+        chooseFolder(actionEvent);
         if (folder != null)
             lblFolder.setText(folder.getPath());
     }
 
-    public void chooseFolder(ActionEvent actionEvent){
+    public void chooseFolder(ActionEvent actionEvent) {
         Node source = (Node) actionEvent.getSource();
         Window theStage = source.getScene().getWindow();
         DirectoryChooser directoryChooser = new DirectoryChooser();
-        directoryChooser.setTitle("Set directory to save images");
+        directoryChooser.setTitle("Set directory to save fileHashMap");
         folder = directoryChooser.showDialog(theStage);
     }
 
     public void setupTableView(TableView upTableView) {
-        tableView.getColumns().addAll(
-                new TableColumn<String,String>("Name"),
-                new TableColumn<String,String>("Width"),
-                new TableColumn<String,String>("Height")
-        );
+        TableColumn<Value, String> name = new TableColumn<>("Name");
+        TableColumn<Value, String> value = new TableColumn<>("Value");
+
+
+        tableView.getColumns().addAll(name, value);
+
+        name.setCellValueFactory(param -> param.getValue().getName());
+        value.setCellValueFactory(param -> param.getValue().getValue());
+
+
+        name.prefWidthProperty().bind(tableView.widthProperty().divide(2));
+        value.prefWidthProperty().bind(tableView.widthProperty().divide(2));
+
+        tableView.setItems(imageList);
+
     }
 }
